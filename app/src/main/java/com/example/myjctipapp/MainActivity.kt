@@ -18,13 +18,19 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.rounded.AttachMoney
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableDoubleState
 import androidx.compose.runtime.MutableIntState
@@ -38,8 +44,12 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.modifier.modifierLocalConsumer
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -133,7 +143,7 @@ fun MainContent() {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun BillForm(
     modifier: Modifier = Modifier,
@@ -177,21 +187,52 @@ fun BillForm(
             verticalArrangement = Arrangement.Top,
             horizontalAlignment = Alignment.Start
         ) {
-            InputField(
-                valueState = totalBillState,
-                labelID = "Enter Bill",
-                enabled = true,
-                isSingleLine = true,
-                onAction = KeyboardActions {
-                    if (!validState) return@KeyboardActions
-                    onValChange(
-                        totalBillState.value
-                            .trim()
-                            .format("%.2d")
-                    )
+            OutlinedTextField(
+                value = totalBillState.value,
+                onValueChange = { inputString ->
+                    var value = inputString.trim().replace(',', '.')
 
-                    keyboardController?.hide()
-                }
+                    if (value.length == 1 && value.first() == '0') {
+                        value = value.drop(1)
+                    }
+                    if (value.count { it == '.' } > 1) {
+                        value = value.dropLast(1)
+                    }
+
+                    if (!("\\d+[.]?.{0,2}$".toRegex().matches(value))) {
+                        value = value.dropLast(1)
+                    }
+
+                    totalBillState.value = value
+
+                    if (totalBillState.value.isNotEmpty()) {
+
+                        tipAmountState.doubleValue = calculateTotalTip(
+                            totalBillState.value,
+                            tipPercentageState.intValue
+                        )
+
+                        billPerPersonState.doubleValue = calculateTotalPerPerson(
+                            totalBillState.value.toDouble(),
+                            tipAmountState.doubleValue,
+                            splitByState.intValue
+                        )
+                    } else {
+                        billPerPersonState.doubleValue = 0.0
+                    }
+
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = true,
+                singleLine = true,
+                label = { Text(text = "Enter Bill") },
+                leadingIcon = { Icon(
+                    imageVector = Icons.Rounded.AttachMoney,
+                    contentDescription = "Money Icon")},
+                keyboardOptions =
+                KeyboardOptions.Default.copy(
+                    keyboardType = KeyboardType.Number
+                )
             )
 
             if (validState) {
@@ -306,6 +347,7 @@ fun BillForm(
 
             } else {
                 Box {}
+
                 totalBillState.value = ""
                 sliderPositionState.floatValue = 0.0f
                 tipPercentageState.intValue = 0
